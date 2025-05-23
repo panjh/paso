@@ -413,3 +413,6 @@ Awaiter<std::string> co_string() {
 # `paso` on github
 
 [https://github.com/panjh/paso.git](https://github.com/panjh/paso.git)
+
+# `paso` on gitee
+[https://gitee.com/edisons/paso.git](https://gitee.com/edisons/paso.git)
