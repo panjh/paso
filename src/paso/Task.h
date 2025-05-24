@@ -6,6 +6,7 @@
 #include <source_location>
 #include <memory>
 #include <type_traits>
+#include <concepts>
 
 //#define pasov(FMT, ...) printf(FMT, ##__VA_ARGS__)
 #define pasov(...)
@@ -158,6 +159,46 @@ public:
     Task(const Task &b) = delete;
 
     T value;
+
+    template<typename To>
+    class [[nodiscard]] Trans : public Task<To> {
+    public:
+        Trans(Task<T> &&f, std::function<To(T)> &&conv) : Task<To>() {
+            if (f.is_done()) {
+                if constexpr (std::is_void_v<To>) conv(f.value);
+                else this->value = conv(f.value);
+            }
+            else {
+                Task<T> *from = new Task<T>(std::move(f));
+                this->append(from);
+                this->callback = new TransCallback(from, std::move(conv));
+                this->state = CALLBACK;
+            }
+        }
+
+        Trans(Task<To> &&b) : Task<To>(std::move(b)) {}
+
+    protected:
+        struct TransCallback : public BaseTask::Callback {
+            Task<T> *from;
+            std::function<To(T)> conv;
+
+            TransCallback(Task<T> *from, std::function<To(T)> &&conv) : from(from), conv(std::move(conv)) {}
+
+            virtual void call(BaseTask *task) override {
+                Task<To> *to = static_cast<Task<To>*>(task);
+                if constexpr (std::is_void_v<To>) conv(from->value);
+                else to->value = conv(from->value);
+                to->remove();
+                delete from;
+            }
+        };
+    };
+
+    template<typename To>
+    Trans<To> trans(std::function<To(T)> &&conv) {
+        return Trans<To>(std::move(*this), std::move(conv));
+    }
 };
 
 template<>
@@ -170,6 +211,46 @@ public:
     explicit Task(Handle handle) : BaseTask(handle) {}
 
     Task(const Task &b) = delete;
+
+    template<typename To>
+    class [[nodiscard]] Trans : public Task<To> {
+    public:
+        Trans(Task<> &&f, std::function<To()> &&conv) : Task<To>() {
+            if (f.is_done()) {
+                if constexpr (std::is_void_v<To>) conv();
+                else this->value = conv();
+            }
+            else {
+                Task<> *from = new Task<>(std::move(f));
+                this->append(from);
+                this->callback = new TransCallback(from, std::move(conv));
+                this->state = CALLBACK;
+            }
+        }
+
+        Trans(Task<> &&b) : Task<>(std::move(b)) {}
+
+    protected:
+        struct TransCallback : public BaseTask::Callback {
+            Task<> *from;
+            std::function<To()> conv;
+
+            TransCallback(Task<> *from, std::function<To()> &&conv) : from(from), conv(std::move(conv)) {}
+
+            virtual void call(BaseTask *task) override {
+                Task<To> *to = static_cast<Task<To>*>(task);
+                if constexpr (std::is_void_v<To>) conv();
+                else to->value = conv();
+                task->remove();
+                delete from;
+            }
+        };
+    };
+
+    template<typename To>
+    Trans<To> trans(std::function<To()> &&conv) {
+        return Trans<To>(std::move(*this), std::move(conv));
+    }
 };
 
 template<typename T=void>
@@ -259,132 +340,5 @@ template<typename T>
 inline Sync<T> sync(T value) { return {value}; }
 
 inline Sync<> sync() { return {}; }
-
-template<typename T=void, typename F=void>
-class [[nodiscard]] Trans : public Task<T> {
-public:
-    Trans(Task<F> &&f, std::function<T(F)> &&conv) : Task<T>() {
-        if (f.is_done()) Task<T>::value = conv(f.value);
-        else {
-            Task<F> *from = new Task<F>(std::move(f));
-            Task<T>::append(from);
-            Task<T>::callback = new TransCallback(from, std::move(conv));
-            Task<T>::state = Task<T>::CALLBACK;
-        }
-    }
-
-    Trans(Task<T> &&b) : Task<T>(std::move(b)) {}
-
-protected:
-    struct TransCallback : public BaseTask::Callback {
-        Task<F> *from;
-        std::function<T(F)> conv;
-
-        TransCallback(Task<F> *from, std::function<T(F)> &&conv) : from(from), conv(std::move(conv)) {}
-
-        virtual void call(BaseTask *task) override {
-            Task<T> *to = static_cast<Task<T>*>(task);
-            to->value = conv(from->value);
-            to->remove();
-            delete from;
-        }
-    };
-};
-
-template<typename T>
-requires (!std::is_void_v<T>)
-class [[nodiscard]] Trans<T, void> : public Task<T> {
-public:
-    Trans(Task<> &&f, std::function<T()> &&conv) : Task<T>() {
-        if (f.is_done()) Task<T>::value = conv();
-        else {
-            Task<> *from = new Task<>(std::move(f));
-            Task<T>::append(from);
-            Task<T>::callback = new TransCallback(from, std::move(conv));
-            Task<T>::state = Task<T>::CALLBACK;
-        }
-    }
-
-    Trans(Task<T> &&b) : Task<T>(std::move(b)) {}
-
-protected:
-    struct TransCallback : public BaseTask::Callback {
-        Task<> *from;
-        std::function<T()> conv;
-
-        TransCallback(Task<> *from, std::function<T()> &&conv) : from(from), conv(std::move(conv)) {}
-
-        virtual void call(BaseTask *task) override {
-            static_cast<Task<T>*>(task)->value = conv();
-            task->remove();
-            delete from;
-        }
-    };
-};
-
-template<typename F>
-requires (!std::is_void_v<F>)
-class [[nodiscard]] Trans<void, F> : public Task<> {
-public:
-    Trans(Task<F> &&f, std::function<void(F)> &&conv=nullptr) : Task<>() {
-        if (f.is_done()) {
-            if (conv) conv(f.value);
-        }
-        else {
-            Task<F> *from = new Task<>(std::move(f));
-            Task<>::append(from);
-            Task<>::callback = new TransCallback(from, std::move(conv));
-            Task<>::state = Task<>::CALLBACK;
-        }
-    }
-
-    Trans(Task<> &&b) : Task<>(std::move(b)) {}
-
-protected:
-    struct TransCallback : public BaseTask::Callback {
-        Task<F> *from;
-        std::function<void(F)> conv;
-
-        TransCallback(Task<> *from, std::function<void(F)> &&conv) : from(from), conv(std::move(conv)) {}
-
-        virtual void call(BaseTask *task) override {
-            if (conv) conv(from->value);
-            task->remove();
-            delete from;
-        }
-    };
-};
-
-template<>
-class [[nodiscard]] Trans<void, void> : public Task<> {
-public:
-    Trans(Task<> &&f, std::function<void()> &&conv=nullptr) : Task<>() {
-        if (f.is_done()) {
-            if (conv) conv();
-        }
-        else {
-            Task<> *from = new Task<>(std::move(f));
-            Task<>::append(from);
-            Task<>::callback = new TransCallback(from, std::move(conv));
-            Task<>::state = Task<>::CALLBACK;
-        }
-    }
-
-    Trans(Task<> &&b) : Task<>(std::move(b)) {}
-
-protected:
-    struct TransCallback : public BaseTask::Callback {
-        Task<> *from;
-        std::function<void()> conv;
-
-        TransCallback(Task<> *from, std::function<void()> &&conv) : from(from), conv(std::move(conv)) {}
-
-        virtual void call(BaseTask *task) override {
-            if (conv) conv();
-            task->remove();
-            delete from;
-        }
-    };
-};
 
 } // namespace paso

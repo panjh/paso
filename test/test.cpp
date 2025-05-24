@@ -24,7 +24,7 @@ Async<std::string> co_string(int i) {
 
 Async<int> co_str2int(int i) {
     printf("str2int 0.%d\n", i);
-    return Trans<int, std::string>(co_string(i*10), [](std::string s) -> int {
+    return co_string(i*10).trans<int>([](std::string s) -> int {
         int i = strtol(s.c_str(), nullptr, 10);
         printf("conv '%s' to %d\n", s.c_str(), i);
         return i;

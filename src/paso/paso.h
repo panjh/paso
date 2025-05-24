@@ -82,7 +82,7 @@ inline Async<> sleep_until(T endtime) {
 
 template<typename R, typename T, TimeUnit U=ToTimeUnit<T>>
 inline Async<R> sleep_until_and_return(R value, T endtime) {
-    return Trans<R>(sleep_until(endtime), [value] { return value; });
+    return sleep_until(endtime).template trans<R>([value] { return value; });
 }
 
 template<typename T, TimeUnit U=ToTimeUnit<T>>
@@ -103,7 +103,7 @@ inline Async<> wait(std::function<bool()> &&condition) {
 
 template<typename R>
 inline Async<R> wait_and_return(R value, std::function<bool()> &&condition) {
-    return Trans<R>(wait(std::move(condition)), [value] { return value; });
+    return wait(std::move(condition)).trans<R>([value] { return value; });
 }
 
 template<typename T, TimeUnit U=ToTimeUnit<T>>
@@ -120,7 +120,7 @@ inline Async<> sleep_and_wait(T time, std::function<bool()> &&condition) {
 
 template<typename T, TimeUnit U=ToTimeUnit<T>>
 inline Async<> sleep_until_then(T endtime, std::function<void()> &&action) {
-    return Trans<>(sleep_until(endtime), std::move(action));
+    return sleep_until(endtime).template trans<void>(std::move(action));
 }
 
 template<typename T, TimeUnit U=ToTimeUnit<T>>
