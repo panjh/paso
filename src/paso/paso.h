@@ -95,27 +95,27 @@ inline Async<R> sleep_and_return(R value, T time) {
     return sleep_until_and_return(value, Micros(micros() + U(time).micros()));
 }
 
-inline Async<> wait(std::function<bool()> &&condition) {
+inline Async<> wait(std::function<bool()> condition) {
     while (!condition()) {
         co_await std::suspend_always();
     }
 }
 
 template<typename R>
-inline Async<R> wait_and_return(R value, std::function<bool()> &&condition) {
-    return wait(std::move(condition)).trans<R>([value] { return value; });
+inline Async<R> wait_and_return(R value, std::function<bool()> condition) {
+    return wait(condition).trans<R>([value] { return value; });
 }
 
 template<typename T, TimeUnit U=ToTimeUnit<T>>
-inline Async<> sleep_until_and_wait(T endtime, std::function<bool()> &&condition) {
+inline Async<> sleep_until_and_wait(T endtime, std::function<bool()> condition) {
     while (micros() < U(endtime).micros() || !condition()) {
         co_await std::suspend_always();
     }
 }
 
 template<typename T, TimeUnit U=ToTimeUnit<T>>
-inline Async<> sleep_and_wait(T time, std::function<bool()> &&condition) {
-    return sleep_until_and_wait(Micros(micros() + U(time).micros()), std::move(condition));
+inline Async<> sleep_and_wait(T time, std::function<bool()> condition) {
+    return sleep_until_and_wait(Micros(micros() + U(time).micros()), condition);
 }
 
 template<typename T, TimeUnit U=ToTimeUnit<T>>
